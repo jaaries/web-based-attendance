@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rep QR Generator</title>
+  <link rel="stylesheet" href="css/bootstrap.min.css" />
+  <style>
+    body { padding: 1.5rem; background:#f7f7f7; }
+    .card { max-width:720px; margin:0 auto; }
+    #qrcodeCanvas { border:1px solid #ddd; background:#fff; }
+  </style>
+</head>
+<body>
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h4 class="card-title">Representative QR Generator</h4>
+      <p class="small text-muted">Create a QR containing hotspot & upload info for students to scan.</p>
+
+      <form id="qrForm" class="mb-3">
+        <div class="mb-2">
+          <label class="form-label">Representative ID</label>
+          <input id="repId" class="form-control" placeholder="rep-123" />
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Session ID</label>
+          <input id="sessionId" class="form-control" placeholder="session-20251009-0900" />
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Representative upload URL (repUrl)</label>
+          <input id="repUrl" class="form-control" placeholder="http://192.168.4.1:3000/upload" />
+          <div class="form-text">Student page will attempt POST to this address when connected to your hotspot.</div>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Hotspot (wifi) SSID</label>
+          <input id="wifiSsid" class="form-control" placeholder="RepHotspot" />
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Hotspot Password</label>
+          <input id="wifiPassword" class="form-control" placeholder="password (optional)" />
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Timestamp (ISO)</label>
+          <input id="timestamp" class="form-control" />
+          <div class="form-text">This timestamp will be used as attendance time. Defaults to now.</div>
+        </div>
+
+        <button type="button" id="generateBtn" class="btn btn-primary">Generate QR</button>
+        <button type="button" id="downloadBtn" class="btn btn-outline-secondary ms-2" disabled>Download PNG</button>
+        <button type="button" id="copyJsonBtn" class="btn btn-outline-info ms-2" disabled>Copy JSON</button>
+      </form>
+
+      <div class="mb-3 text-center">
+        <canvas id="qrcodeCanvas" width="300" height="300"></canvas>
+      </div>
+
+      <pre id="rawJson" style="white-space:pre-wrap; background:#ffffff; padding:10px; border:1px solid #eee; display:none;"></pre>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <script>
+    const repIdEl = document.getElementById('repId');
+    const sessionIdEl = document.getElementById('sessionId');
+    const repUrlEl = document.getElementById('repUrl');
+    const wifiSsidEl = document.getElementById('wifiSsid');
+    const wifiPasswordEl = document.getElementById('wifiPassword');
+    const timestampEl = document.getElementById('timestamp');
+    const generateBtn = document.getElementById('generateBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyJsonBtn = document.getElementById('copyJsonBtn');
+    const rawJsonEl = document.getElementById('rawJson');
+    const canvas = document.getElementById('qrcodeCanvas');
+
+    // sane defaults
+    timestampEl.value = new Date().toISOString();
+    repUrlEl.value = 'http://192.168.4.1:3000/upload';
+
+    function buildPayload() {
+      const payload = {
+        repId: repIdEl.value || null,
+        sessionId: sessionIdEl.value || null,
+        timestamp: timestampEl.value || (new Date()).toISOString(),
+        repUrl: repUrlEl.value || null,
+        wifi: {
+          ssid: wifiSsidEl.value || null,
+          password: wifiPasswordEl.value || null
+        }
+      };
+      // remove nulls for compactness
+      if (!payload.repId) delete payload.repId;
+      if (!payload.sessionId) delete payload.sessionId;
+      if (!payload.repUrl) delete payload.repUrl;
+      if (!payload.wifi.ssid && !payload.wifi.password) delete payload.wifi;
+      return payload;
+    }
+
+    async function generateQR() {
+      const payload = buildPayload();
+      const json = JSON.stringify(payload);
+      rawJsonEl.textContent = json;
+      rawJsonEl.style.display = 'block';
+
+      // render QR to canvas
+      try {
+        await QRCode.toCanvas(canvas, json, { width: 300 });
+        downloadBtn.disabled = false;
+        copyJsonBtn.disabled = false;
+      } catch (err) {
+        console.error('QR generation error', err);
+        alert('Failed to generate QR: ' + (err && err.message ? err.message : err));
+      }
+    }
+
+    generateBtn.addEventListener('click', () => {
+      // update timestamp to now if blank or user didn't change
+      if (!timestampEl.value) timestampEl.value = new Date().toISOString();
+      generateQR();
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = 'rep_qr.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
+
+    copyJsonBtn.addEventListener('click', async () => {
+      const payload = buildPayload();
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(payload));
+        alert('JSON copied to clipboard');
+      } catch (err) {
+        alert('Unable to copy JSON: ' + (err && err.message ? err.message : err));
+      }
+    });
+
+    // optionally auto-generate on load
+    // generateQR();
+  </script>
+</body>
+</html>
